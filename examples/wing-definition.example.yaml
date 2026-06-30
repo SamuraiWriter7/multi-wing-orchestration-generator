@@ -1,5 +1,5 @@
-schema_version: "0.3.0"
-generator_id: "multi-wing-orchestration-generator.blocking-condition-expansion"
+schema_version: "0.4.0"
+generator_id: "multi-wing-orchestration-generator.human-review-gate-expansion"
 created_at: "2026-06-30T00:00:00Z"
 
 target:
@@ -232,6 +232,22 @@ global_rules:
       - "Any repair proposal that changes operational behavior."
       - "Any boundary override request."
       - "Any release-readiness decision."
+    approval_record_fields:
+      - "review_id"
+      - "gate_id"
+      - "reviewer_role"
+      - "decision"
+      - "approved_at"
+      - "approval_reason"
+      - "trace_id"
+    rejection_record_fields:
+      - "review_id"
+      - "gate_id"
+      - "reviewer_role"
+      - "decision"
+      - "rejected_at"
+      - "rejection_reason"
+      - "trace_id"
 
   trace_receipt:
     enabled: true
@@ -252,6 +268,8 @@ global_rules:
       - "handoff_rules"
       - "blocking_conditions"
       - "boundary_escalation_map"
+      - "human_review_gates"
+      - "review_record_templates"
       - "safety_boundary"
       - "human_review"
       - "trace_core"
