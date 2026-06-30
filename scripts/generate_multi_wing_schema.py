@@ -158,6 +158,7 @@ def expand_handoff_rules(wings: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         for to_wing in wing.get("handoff_to", []):
             handoff_rules.append(
                 {
+                    "rule_id": f"handoff.{from_wing}.{to_wing}",
                     "from_wing": from_wing,
                     "to_wing": to_wing,
                     "condition": f"{from_wing} completed and {to_wing} is eligible for next review step."
@@ -210,6 +211,156 @@ def build_boundary_escalation_map(wings: List[Dict[str, Any]]) -> List[Dict[str,
     return escalation_map
 
 
+def build_human_review_gates(
+    wings: List[Dict[str, Any]],
+    reviewer_role: str
+) -> List[Dict[str, Any]]:
+    gates: List[Dict[str, Any]] = []
+    wing_ids = set(get_wing_ids(wings))
+    default_escalation_target = "human_gate" if "human_gate" in wing_ids else wings[0]["wing_id"]
+
+    for wing in wings:
+        wing_id = wing["wing_id"]
+
+        if wing["requires_human_review"]:
+            gates.append(
+                {
+                    "gate_id": f"gate.{wing_id}.wing_review",
+                    "source_type": "wing",
+                    "source_id": wing_id,
+                    "source_wing": wing_id,
+                    "severity": "medium",
+                    "reviewer_role": reviewer_role,
+                    "review_trigger": f"{wing_id} requires human review before completion.",
+                    "escalation_target": default_escalation_target,
+                    "approval_record_required": True,
+                    "rejection_record_required": True,
+                    "trace_required": wing["emits_trace_receipt"]
+                }
+            )
+
+        for condition in wing.get("blocking_conditions", []):
+            if condition["requires_human_review"]:
+                gates.append(
+                    {
+                        "gate_id": f"gate.{condition['condition_id']}",
+                        "source_type": "blocking_condition",
+                        "source_id": condition["condition_id"],
+                        "source_wing": wing_id,
+                        "severity": condition["severity"],
+                        "reviewer_role": reviewer_role,
+                        "review_trigger": condition["description"],
+                        "escalation_target": condition["escalation_target"],
+                        "approval_record_required": True,
+                        "rejection_record_required": True,
+                        "trace_required": condition["trace_required"]
+                    }
+                )
+
+    return gates
+
+
+def build_review_record_templates(global_rules: Dict[str, Any]) -> Dict[str, Any]:
+    human_review = global_rules["human_review"]
+
+    return {
+        "approval_record": {
+            "required_fields": human_review["approval_record_fields"]
+        },
+        "rejection_record": {
+            "required_fields": human_review["rejection_record_fields"]
+        }
+    }
+
+
+def build_trace_receipt_requirements(
+    wings: List[Dict[str, Any]],
+    handoff_rules: List[Dict[str, Any]],
+    blocking_conditions: List[Dict[str, Any]],
+    human_review_gates: List[Dict[str, Any]],
+    required_fields: List[str]
+) -> List[Dict[str, Any]]:
+    requirements: List[Dict[str, Any]] = []
+
+    for wing in wings:
+        if wing["emits_trace_receipt"]:
+            wing_id = wing["wing_id"]
+
+            requirements.append(
+                {
+                    "requirement_id": f"trace.wing.{wing_id}",
+                    "target_type": "wing",
+                    "target_id": wing_id,
+                    "source_wing": wing_id,
+                    "event_type": "wing_event",
+                    "required_fields": required_fields,
+                    "required": True
+                }
+            )
+
+    for rule in handoff_rules:
+        requirements.append(
+            {
+                "requirement_id": f"trace.{rule['rule_id']}",
+                "target_type": "handoff_rule",
+                "target_id": rule["rule_id"],
+                "source_wing": rule["from_wing"],
+                "event_type": "handoff_event",
+                "required_fields": required_fields,
+                "required": True
+            }
+        )
+
+    for condition in blocking_conditions:
+        if condition["trace_required"]:
+            requirements.append(
+                {
+                    "requirement_id": f"trace.blocking_condition.{condition['condition_id']}",
+                    "target_type": "blocking_condition",
+                    "target_id": condition["condition_id"],
+                    "source_wing": condition["wing_id"],
+                    "event_type": "blocking_condition_event",
+                    "required_fields": required_fields,
+                    "required": True
+                }
+            )
+
+    for gate in human_review_gates:
+        if gate["trace_required"]:
+            requirements.append(
+                {
+                    "requirement_id": f"trace.human_review_gate.{gate['gate_id']}",
+                    "target_type": "human_review_gate",
+                    "target_id": gate["gate_id"],
+                    "source_wing": gate["source_wing"],
+                    "event_type": "human_review_gate_event",
+                    "required_fields": required_fields,
+                    "required": True
+                }
+            )
+
+    return requirements
+
+
+def build_trace_coverage_matrix(
+    trace_receipt_requirements: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    coverage_matrix: List[Dict[str, Any]] = []
+
+    for requirement in trace_receipt_requirements:
+        coverage_matrix.append(
+            {
+                "coverage_id": f"coverage.{requirement['target_type']}.{requirement['target_id']}",
+                "target_type": requirement["target_type"],
+                "target_id": requirement["target_id"],
+                "trace_requirement_id": requirement["requirement_id"],
+                "covered": True
+            }
+        )
+
+    return coverage_matrix
+
+
 def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
     target = definition["target"]
     wings = definition["wings"]
@@ -234,6 +385,10 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
             "handoff_rules",
             "blocking_conditions",
             "boundary_escalation_map",
+            "human_review_gates",
+            "review_record_templates",
+            "trace_receipt_requirements",
+            "trace_coverage_matrix",
             "safety_boundary",
             "human_review",
             "trace_core"
@@ -241,7 +396,7 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
         "properties": {
             "schema_version": {
                 "type": "string",
-                "const": "0.3.0"
+                "const": "0.5.0"
             },
             "orchestration_id": {
                 "type": "string",
@@ -276,6 +431,27 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
                     "$ref": "#/$defs/boundary_escalation"
                 }
             },
+            "human_review_gates": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/$defs/human_review_gate"
+                }
+            },
+            "review_record_templates": {
+                "$ref": "#/$defs/review_record_templates"
+            },
+            "trace_receipt_requirements": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/$defs/trace_receipt_requirement"
+                }
+            },
+            "trace_coverage_matrix": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/$defs/trace_coverage_item"
+                }
+            },
             "safety_boundary": {
                 "$ref": "#/$defs/safety_boundary"
             },
@@ -298,6 +474,24 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
                     "medium",
                     "high",
                     "critical"
+                ]
+            },
+            "event_type": {
+                "type": "string",
+                "enum": [
+                    "wing_event",
+                    "handoff_event",
+                    "blocking_condition_event",
+                    "human_review_gate_event"
+                ]
+            },
+            "target_type": {
+                "type": "string",
+                "enum": [
+                    "wing",
+                    "handoff_rule",
+                    "blocking_condition",
+                    "human_review_gate"
                 ]
             },
             "wing_state": {
@@ -351,11 +545,16 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
                 "type": "object",
                 "additionalProperties": not strict,
                 "required": [
+                    "rule_id",
                     "from_wing",
                     "to_wing",
                     "condition"
                 ],
                 "properties": {
+                    "rule_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
                     "from_wing": {
                         "$ref": "#/$defs/wing_id"
                     },
@@ -439,6 +638,171 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
                     }
                 }
             },
+            "human_review_gate": {
+                "type": "object",
+                "additionalProperties": not strict,
+                "required": [
+                    "gate_id",
+                    "source_type",
+                    "source_id",
+                    "source_wing",
+                    "severity",
+                    "reviewer_role",
+                    "review_trigger",
+                    "escalation_target",
+                    "approval_record_required",
+                    "rejection_record_required",
+                    "trace_required"
+                ],
+                "properties": {
+                    "gate_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "source_type": {
+                        "type": "string",
+                        "enum": [
+                            "wing",
+                            "blocking_condition"
+                        ]
+                    },
+                    "source_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "source_wing": {
+                        "$ref": "#/$defs/wing_id"
+                    },
+                    "severity": {
+                        "$ref": "#/$defs/severity"
+                    },
+                    "reviewer_role": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "review_trigger": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "escalation_target": {
+                        "$ref": "#/$defs/wing_id"
+                    },
+                    "approval_record_required": {
+                        "type": "boolean"
+                    },
+                    "rejection_record_required": {
+                        "type": "boolean"
+                    },
+                    "trace_required": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "review_record_templates": {
+                "type": "object",
+                "additionalProperties": not strict,
+                "required": [
+                    "approval_record",
+                    "rejection_record"
+                ],
+                "properties": {
+                    "approval_record": {
+                        "$ref": "#/$defs/review_record_template"
+                    },
+                    "rejection_record": {
+                        "$ref": "#/$defs/review_record_template"
+                    }
+                }
+            },
+            "review_record_template": {
+                "type": "object",
+                "additionalProperties": not strict,
+                "required": [
+                    "required_fields"
+                ],
+                "properties": {
+                    "required_fields": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "trace_receipt_requirement": {
+                "type": "object",
+                "additionalProperties": not strict,
+                "required": [
+                    "requirement_id",
+                    "target_type",
+                    "target_id",
+                    "source_wing",
+                    "event_type",
+                    "required_fields",
+                    "required"
+                ],
+                "properties": {
+                    "requirement_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "target_type": {
+                        "$ref": "#/$defs/target_type"
+                    },
+                    "target_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "source_wing": {
+                        "$ref": "#/$defs/wing_id"
+                    },
+                    "event_type": {
+                        "$ref": "#/$defs/event_type"
+                    },
+                    "required_fields": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "required": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "trace_coverage_item": {
+                "type": "object",
+                "additionalProperties": not strict,
+                "required": [
+                    "coverage_id",
+                    "target_type",
+                    "target_id",
+                    "trace_requirement_id",
+                    "covered"
+                ],
+                "properties": {
+                    "coverage_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "target_type": {
+                        "$ref": "#/$defs/target_type"
+                    },
+                    "target_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "trace_requirement_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "covered": {
+                        "type": "boolean"
+                    }
+                }
+            },
             "safety_boundary": {
                 "type": "object",
                 "additionalProperties": not strict,
@@ -494,6 +858,7 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
                 "required": [
                     "enabled",
                     "required_trace_fields",
+                    "required_event_types",
                     "required_orchestration_fields"
                 ],
                 "properties": {
@@ -505,6 +870,13 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
                         "minItems": 1,
                         "items": {
                             "type": "string"
+                        }
+                    },
+                    "required_event_types": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "$ref": "#/$defs/event_type"
                         }
                     },
                     "required_orchestration_fields": {
@@ -526,8 +898,29 @@ def build_generated_example(definition: Dict[str, Any]) -> Dict[str, Any]:
 
     validate_definition_integrity(wings)
 
+    handoff_rules = expand_handoff_rules(wings)
+    blocking_conditions = expand_blocking_conditions(wings)
+    boundary_escalation_map = build_boundary_escalation_map(wings)
+    human_review_gates = build_human_review_gates(
+        wings,
+        global_rules["human_review"]["reviewer_role"]
+    )
+    review_record_templates = build_review_record_templates(global_rules)
+
+    trace_receipt_requirements = build_trace_receipt_requirements(
+        wings=wings,
+        handoff_rules=handoff_rules,
+        blocking_conditions=blocking_conditions,
+        human_review_gates=human_review_gates,
+        required_fields=global_rules["trace_receipt"]["required_fields"]
+    )
+
+    trace_coverage_matrix = build_trace_coverage_matrix(
+        trace_receipt_requirements
+    )
+
     return {
-        "schema_version": "0.3.0",
+        "schema_version": "0.5.0",
         "orchestration_id": f"{definition['target']['protocol_name']}.generated.example",
         "created_at": now_utc(),
         "wings": [
@@ -541,9 +934,13 @@ def build_generated_example(definition: Dict[str, Any]) -> Dict[str, Any]:
             }
             for wing in wings
         ],
-        "handoff_rules": expand_handoff_rules(wings),
-        "blocking_conditions": expand_blocking_conditions(wings),
-        "boundary_escalation_map": build_boundary_escalation_map(wings),
+        "handoff_rules": handoff_rules,
+        "blocking_conditions": blocking_conditions,
+        "boundary_escalation_map": boundary_escalation_map,
+        "human_review_gates": human_review_gates,
+        "review_record_templates": review_record_templates,
+        "trace_receipt_requirements": trace_receipt_requirements,
+        "trace_coverage_matrix": trace_coverage_matrix,
         "safety_boundary": {
             "prohibited_uses": global_rules["safety_boundary"]["prohibited_uses"],
             "escalation_conditions": global_rules["safety_boundary"]["escalation_conditions"]
@@ -556,6 +953,7 @@ def build_generated_example(definition: Dict[str, Any]) -> Dict[str, Any]:
         "trace_core": {
             "enabled": global_rules["trace_receipt"]["enabled"],
             "required_trace_fields": global_rules["trace_receipt"]["required_fields"],
+            "required_event_types": global_rules["trace_receipt"]["required_event_types"],
             "required_orchestration_fields": global_rules["orchestration_receipt"]["required_fields"]
         }
     }
