@@ -17,7 +17,7 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "0.4.0"
+      "const": "0.5.0"
     },
     "generator_id": {
       "type": "string",
@@ -260,7 +260,8 @@
           "additionalProperties": false,
           "required": [
             "enabled",
-            "required_fields"
+            "required_fields",
+            "required_event_types"
           ],
           "properties": {
             "enabled": {
@@ -273,6 +274,20 @@
               "items": {
                 "type": "string",
                 "minLength": 1
+              }
+            },
+            "required_event_types": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "wing_event",
+                  "handoff_event",
+                  "blocking_condition_event",
+                  "human_review_gate_event"
+                ]
               }
             }
           }
