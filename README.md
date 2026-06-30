@@ -1,6 +1,6 @@
 # Multi-Wing Orchestration Generator
 
-Experimental OS-level generator for defensive multi-wing orchestration structures, schema fragments, handoff rules, blocking routes, escalation maps, human review gates, and review record templates.
+Experimental OS-level generator for defensive multi-wing orchestration structures, schema fragments, handoff rules, blocking routes, escalation maps, human review gates, review record templates, trace receipt requirements, and trace coverage validation.
 
 ## Purpose
 
@@ -18,23 +18,25 @@ multi-wing-orchestration-generator
 = generator layer for producing defensive multi-wing structures
 ```
 
-The goal is to keep the defensive protocol itself separate from the tooling that generates orchestration schemas, handoff rules, blocking routes, escalation maps, human review gates, review record templates, examples, and validation structures.
+The goal is to keep the defensive protocol itself separate from the tooling that generates orchestration schemas, handoff rules, blocking routes, escalation maps, human review gates, review record templates, trace receipt requirements, examples, and validation structures.
 
-## v0.4 Scope
+## v0.5 Scope
 
-v0.4 defines the Human Review Gate Expansion layer.
+v0.5 defines the Trace Receipt Bridge Expansion layer.
 
-It expands `requires_human_review` from a boolean flag into generated `human_review_gates`.
+It expands traceability from a global setting into generated `trace_receipt_requirements` and a generated `trace_coverage_matrix`.
 
-v0.4 adds:
+v0.5 adds:
 
-* automatic `human_review_gates` generation
-* review gates for wings with `requires_human_review: true`
-* review gates for blocking conditions with `requires_human_review: true`
-* `review_record_templates` for approval and rejection records
-* validation for generated human review gates
-* validation for human review gate coverage
-* validation for approval and rejection record templates
+* automatic `trace_receipt_requirements` generation
+* trace requirements for wings that emit trace receipts
+* trace requirements for generated handoff rules
+* trace requirements for blocking conditions that require trace evidence
+* trace requirements for human review gates that require trace evidence
+* `trace_coverage_matrix`
+* validation for generated trace receipt requirements
+* validation for trace coverage completeness
+* validation that required trace targets have trace requirements
 
 ## Repository Structure
 
@@ -108,10 +110,12 @@ is expanded into generated handoff rules:
 
 ```yaml
 handoff_rules:
-  - from_wing: "finder"
+  - rule_id: "handoff.finder.analyst"
+    from_wing: "finder"
     to_wing: "analyst"
     condition: "finder completed and analyst is eligible for next review step."
-  - from_wing: "finder"
+  - rule_id: "handoff.finder.boundary"
+    from_wing: "finder"
     to_wing: "boundary"
     condition: "finder completed and boundary is eligible for next review step."
 ```
@@ -170,7 +174,7 @@ This allows defensive routes to be validated as part of CI.
 
 ### Human Review Gate Expansion
 
-v0.4 expands `requires_human_review` into generated `human_review_gates`.
+v0.4 expanded `requires_human_review` into generated `human_review_gates`.
 
 The generator creates review gates from:
 
@@ -223,7 +227,7 @@ This turns human review from a passive flag into an explicit review gate.
 
 ### Review Record Templates
 
-v0.4 also introduces `review_record_templates`.
+v0.4 introduced `review_record_templates`.
 
 These templates define the required fields for approval and rejection records.
 
@@ -253,6 +257,57 @@ review_record_templates:
 
 This ensures that human decisions are not only required, but also traceable.
 
+### Trace Receipt Bridge Expansion
+
+v0.5 expands traceability into generated `trace_receipt_requirements`.
+
+The generator creates trace receipt requirements for:
+
+* wings that emit trace receipts
+* generated handoff rules
+* blocking conditions that require trace evidence
+* human review gates that require trace evidence
+
+Example:
+
+```yaml
+trace_receipt_requirements:
+  - requirement_id: "trace.wing.finder"
+    target_type: "wing"
+    target_id: "finder"
+    source_wing: "finder"
+    event_type: "wing_event"
+    required_fields:
+      - "trace_id"
+      - "wing_id"
+      - "event_type"
+      - "input_reference"
+      - "output_reference"
+      - "created_at"
+    required: true
+```
+
+This turns traceability from a global setting into a generated, target-specific structure.
+
+### Trace Coverage Matrix
+
+v0.5 also introduces `trace_coverage_matrix`.
+
+The trace coverage matrix verifies that every trace-required target has a corresponding trace receipt requirement.
+
+Example:
+
+```yaml
+trace_coverage_matrix:
+  - coverage_id: "coverage.wing.finder"
+    target_type: "wing"
+    target_id: "finder"
+    trace_requirement_id: "trace.wing.finder"
+    covered: true
+```
+
+This allows CI to detect missing trace coverage before release.
+
 ### Wing Graph Validation
 
 The generator and validation script check:
@@ -260,6 +315,7 @@ The generator and validation script check:
 * whether every `wing_id` is unique
 * whether every `handoff_to` target exists
 * whether generated `handoff_rules` reference valid wings
+* whether generated handoff rule IDs are unique
 * whether the generated example validates against the generated schema
 
 This prevents silent orchestration drift caused by broken wing references.
@@ -278,8 +334,6 @@ This prevents unsafe or incomplete blocking routes from passing silently.
 
 ### Human Review Gate Validation
 
-v0.4 adds validation for human review routing.
-
 The validation script checks:
 
 * whether generated human review gates reference valid wings
@@ -291,6 +345,21 @@ The validation script checks:
 
 This prevents human review requirements from existing only as decorative flags.
 
+### Trace Coverage Validation
+
+v0.5 adds validation for trace receipt coverage.
+
+The validation script checks:
+
+* whether generated trace receipt requirements reference valid wings
+* whether generated trace receipt requirements reference valid handoff rules
+* whether generated trace receipt requirements reference valid blocking conditions
+* whether generated trace receipt requirements reference valid human review gates
+* whether every trace requirement is covered by the trace coverage matrix
+* whether every trace-required wing, handoff, blocking condition, and human review gate has a trace requirement
+
+This prevents trace requirements from remaining only as global policy text.
+
 ### Global Rules
 
 Global rules define shared orchestration requirements:
@@ -300,6 +369,7 @@ Global rules define shared orchestration requirements:
 * approval record fields
 * rejection record fields
 * trace receipt requirements
+* required trace event types
 * orchestration receipt requirements
 
 ### Generated Schema
@@ -315,6 +385,8 @@ The generated schema includes:
 * `boundary_escalation_map`
 * `human_review_gates`
 * `review_record_templates`
+* `trace_receipt_requirements`
+* `trace_coverage_matrix`
 * `safety_boundary`
 * `human_review`
 * `trace_core`
@@ -373,6 +445,9 @@ A successful validation run should look similar to this:
 [ok] generated human review gates are internally valid
 [ok] human review gate coverage is complete
 [ok] review record templates are valid
+[ok] generated trace receipt requirements are internally valid
+[ok] trace coverage matrix covers all trace requirements
+[ok] required trace targets have trace requirements
 ```
 
 ## Version Arc
@@ -382,6 +457,7 @@ v0.1 Generator Seed Layer
 v0.2 Handoff Rule Expansion
 v0.3 Blocking Condition Expansion
 v0.4 Human Review Gate Expansion
+v0.5 Trace Receipt Bridge Expansion
 ```
 
 ### v0.1 — Generator Seed Layer
@@ -408,11 +484,19 @@ The generator became able to verify that defensive stopping conditions are not j
 
 ### v0.4 — Human Review Gate Expansion
 
-v0.4 expands human review flags into generated review gates.
+v0.4 expanded human review flags into generated review gates.
 
-It adds human review gate generation, approval record templates, rejection record templates, gate coverage validation, and review evidence validation.
+It added human review gate generation, approval record templates, rejection record templates, gate coverage validation, and review evidence validation.
 
-The generator now verifies that required human review paths are explicitly generated and traceable.
+The generator became able to verify that required human review paths are explicitly generated and traceable.
+
+### v0.5 — Trace Receipt Bridge Expansion
+
+v0.5 expands traceability into generated trace receipt requirements and trace coverage validation.
+
+It adds target-specific trace requirements, trace coverage matrices, and CI checks for missing trace coverage.
+
+The generator now verifies that trace-required events are explicitly covered before release.
 
 ## Relationship to Yin-Yang Mythos Regulator
 
@@ -438,26 +522,60 @@ Multi-Wing Orchestration Generator
 = the forge that generates defensive orchestration structures
 ```
 
-## Future Direction
+## First Arc Completion
 
-The next likely version is:
+The first generator arc can be considered complete at v0.5.
 
 ```text
-v0.5 — Trace Receipt Bridge Expansion
+v0.1
+Generate
+
+v0.2
+Connect
+
+v0.3
+Block
+
+v0.4
+Review
+
+v0.5
+Trace
+```
+
+At this point, the generator can produce a CI-verifiable defensive orchestration structure with:
+
+* wing definitions
+* handoff rules
+* blocking conditions
+* boundary escalation maps
+* human review gates
+* review record templates
+* trace receipt requirements
+* trace coverage matrices
+
+## Future Direction
+
+Future versions may proceed into a second generator arc.
+
+Possible next direction:
+
+```text
+v0.6 — Release Readiness Gate Generator
 ```
 
 Potential future layers include:
 
-* generated trace receipt requirements per wing
-* generated trace receipt requirements per handoff
-* generated trace receipt requirements per blocking condition
-* generated trace receipt requirements per human review gate
-* trace coverage validation
-* release-readiness checks
-* generated CI helper files
-* generated repository bootstrap templates
+* generated release-readiness gates
+* generated candidate release checklists
+* README / CHANGELOG alignment checks
+* schema / example alignment checks
+* CI helper generation
+* repository bootstrap templates
 * orchestration graph visualization
-* Multi-Wing release-readiness gates
+* Multi-Wing release-readiness reports
+
+If the scope expands significantly, future tooling may also be split into related repositories to keep this generator focused.
 
 ## Summary
 
@@ -469,9 +587,11 @@ v0.2 gave that seed a wing graph.
 
 v0.3 gave the graph defensive stopping routes.
 
-v0.4 gives the routes human review gates and decision records.
+v0.4 gave the routes human review gates and decision records.
 
-This repository is becoming a defensive orchestration forge.
+v0.5 gives the entire structure trace receipt requirements and trace coverage validation.
+
+This repository is now a defensive orchestration forge with traceable output.
 
 
 
