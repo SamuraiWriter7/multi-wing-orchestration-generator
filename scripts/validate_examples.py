@@ -109,6 +109,87 @@ def validate_handoff_references(definition: Dict[str, Any]) -> None:
     print("[ok] handoff references are valid")
 
 
+def validate_unique_condition_ids(definition: Dict[str, Any]) -> None:
+    wings = definition["wings"]
+
+    seen: Set[str] = set()
+    duplicates: Set[str] = set()
+
+    for wing in wings:
+        for condition in wing.get("blocking_conditions", []):
+            condition_id = condition["condition_id"]
+
+            if condition_id in seen:
+                duplicates.add(condition_id)
+
+            seen.add(condition_id)
+
+    if duplicates:
+        duplicate_list = ", ".join(sorted(duplicates))
+        print(f"[error] duplicate condition_id detected: {duplicate_list}")
+        raise SystemExit(1)
+
+    print("[ok] condition_id values are unique")
+
+
+def validate_blocking_condition_escalation_targets(definition: Dict[str, Any]) -> None:
+    wings = definition["wings"]
+    wing_ids = {wing["wing_id"] for wing in wings}
+
+    invalid_targets: List[str] = []
+
+    for wing in wings:
+        for condition in wing.get("blocking_conditions", []):
+            condition_id = condition["condition_id"]
+            escalation_target = condition["escalation_target"]
+
+            if escalation_target not in wing_ids:
+                invalid_targets.append(f"{condition_id} -> {escalation_target}")
+
+    if invalid_targets:
+        print("[error] invalid blocking condition escalation targets detected")
+
+        for target in invalid_targets:
+            print(f"  - {target}")
+
+        raise SystemExit(1)
+
+    print("[ok] blocking condition escalation targets are valid")
+
+
+def validate_blocking_condition_policy(definition: Dict[str, Any]) -> None:
+    wings = definition["wings"]
+
+    errors: List[str] = []
+
+    for wing in wings:
+        for condition in wing.get("blocking_conditions", []):
+            condition_id = condition["condition_id"]
+            severity = condition["severity"]
+            requires_human_review = condition["requires_human_review"]
+            trace_required = condition["trace_required"]
+
+            if severity == "critical" and not requires_human_review:
+                errors.append(
+                    f"{condition_id}: critical severity must require human review"
+                )
+
+            if severity in {"high", "critical"} and not trace_required:
+                errors.append(
+                    f"{condition_id}: high or critical severity must require trace"
+                )
+
+    if errors:
+        print("[error] invalid blocking condition policy")
+
+        for error in errors:
+            print(f"  - {error}")
+
+        raise SystemExit(1)
+
+    print("[ok] blocking condition policy is valid")
+
+
 def validate_generated_handoff_rules(generated_example: Dict[str, Any]) -> None:
     wing_ids = {wing["wing_id"] for wing in generated_example["wings"]}
 
@@ -125,6 +206,33 @@ def validate_generated_handoff_rules(generated_example: Dict[str, Any]) -> None:
             raise SystemExit(1)
 
     print("[ok] generated handoff rules are internally valid")
+
+
+def validate_generated_boundary_escalation_map(generated_example: Dict[str, Any]) -> None:
+    wing_ids = {wing["wing_id"] for wing in generated_example["wings"]}
+    condition_ids = {
+        condition["condition_id"]
+        for condition in generated_example["blocking_conditions"]
+    }
+
+    for item in generated_example["boundary_escalation_map"]:
+        condition_id = item["condition_id"]
+        source_wing = item["source_wing"]
+        escalation_target = item["escalation_target"]
+
+        if condition_id not in condition_ids:
+            print(f"[error] escalation map references unknown condition_id: {condition_id}")
+            raise SystemExit(1)
+
+        if source_wing not in wing_ids:
+            print(f"[error] escalation map references unknown source_wing: {source_wing}")
+            raise SystemExit(1)
+
+        if escalation_target not in wing_ids:
+            print(f"[error] escalation map references unknown escalation_target: {escalation_target}")
+            raise SystemExit(1)
+
+    print("[ok] generated boundary escalation map is internally valid")
 
 
 def run_generator() -> None:
@@ -145,6 +253,9 @@ def main() -> None:
     validate(wing_example, wing_schema, "wing-definition.example.yaml")
     validate_unique_wing_ids(wing_example)
     validate_handoff_references(wing_example)
+    validate_unique_condition_ids(wing_example)
+    validate_blocking_condition_escalation_targets(wing_example)
+    validate_blocking_condition_policy(wing_example)
 
     print("[generate] Multi-Wing Orchestration Schema and Example")
     run_generator()
@@ -158,6 +269,7 @@ def main() -> None:
 
     validate(generated_example, generated_schema, "generated-multi-wing-defensive-orchestration.example.yaml")
     validate_generated_handoff_rules(generated_example)
+    validate_generated_boundary_escalation_map(generated_example)
 
 
 if __name__ == "__main__":
