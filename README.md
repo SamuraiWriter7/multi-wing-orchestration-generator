@@ -1,6 +1,6 @@
 # Multi-Wing Orchestration Generator
 
-Experimental OS-level generator for defensive multi-wing orchestration structures, schema fragments, safety boundaries, and human review gates.
+Experimental OS-level generator for defensive multi-wing orchestration structures, schema fragments, safety boundaries, escalation routes, and human review gates.
 
 ## Purpose
 
@@ -18,23 +18,28 @@ multi-wing-orchestration-generator
 = generator layer for producing defensive multi-wing structures
 ```
 
-The goal is to keep the defensive protocol itself separate from the tooling that generates orchestration schemas, handoff rules, examples, and validation structures.
+The goal is to keep the defensive protocol itself separate from the tooling that generates orchestration schemas, handoff rules, blocking routes, escalation maps, examples, and validation structures.
 
-## v0.2 Scope
+## v0.3 Scope
 
-v0.2 defines the Handoff Rule Expansion layer.
+v0.3 defines the Blocking Condition Expansion layer.
 
-It expands the generator from simple schema output into wing graph generation and validation.
+It expands `blocking_conditions` from plain strings into structured defensive routing rules.
 
-v0.2 adds:
+v0.3 adds:
 
-* automatic `handoff_rules` generation from each wing's `handoff_to` declarations
-* duplicate `wing_id` detection
-* invalid handoff reference detection
-* generated orchestration example YAML output
-* validation of generated examples against generated schemas
-* internal validation of generated handoff rules
-* stronger CI checks for wing graph consistency
+* structured blocking condition definitions
+* `condition_id`
+* `description`
+* `severity`
+* `escalation_target`
+* `requires_human_review`
+* `trace_required`
+* automatic `boundary_escalation_map` generation
+* duplicate `condition_id` detection
+* invalid `escalation_target` detection
+* blocking condition policy validation
+* generated boundary escalation map validation
 
 ## Repository Structure
 
@@ -93,7 +98,7 @@ Each wing includes:
 
 ### Handoff Rule Expansion
 
-v0.2 automatically expands each wing's `handoff_to` declarations into generated `handoff_rules`.
+v0.2 introduced automatic expansion of each wing's `handoff_to` declarations into generated `handoff_rules`.
 
 For example:
 
@@ -118,6 +123,56 @@ handoff_rules:
 
 This allows the generator to treat wing transitions as a verifiable orchestration graph instead of static prose.
 
+### Blocking Condition Expansion
+
+v0.3 expands `blocking_conditions` from plain strings into structured defensive routing rules.
+
+Before v0.3:
+
+```yaml
+blocking_conditions:
+  - "Schema validation fails."
+  - "Required receipt fields are missing."
+```
+
+From v0.3 onward:
+
+```yaml
+blocking_conditions:
+  - condition_id: "verifier.schema_validation_fails"
+    description: "Schema validation fails."
+    severity: "high"
+    escalation_target: "human_gate"
+    requires_human_review: true
+    trace_required: true
+```
+
+Each blocking condition now includes:
+
+* `condition_id`
+* `description`
+* `severity`
+* `escalation_target`
+* `requires_human_review`
+* `trace_required`
+
+This turns blocking conditions into explicit defensive routing rules.
+
+### Boundary Escalation Map
+
+v0.3 automatically generates a `boundary_escalation_map` from declared blocking conditions.
+
+The escalation map records:
+
+* the blocking condition ID
+* the source wing
+* the severity level
+* the escalation target
+* whether human review is required
+* whether trace evidence is required
+
+This allows defensive routes to be validated as part of CI.
+
 ### Wing Graph Validation
 
 The generator and validation script check:
@@ -128,6 +183,20 @@ The generator and validation script check:
 * whether the generated example validates against the generated schema
 
 This prevents silent orchestration drift caused by broken wing references.
+
+### Blocking Condition Validation
+
+v0.3 adds validation for defensive blocking policy.
+
+The validation script checks:
+
+* whether every `condition_id` is unique
+* whether every `escalation_target` exists as a valid wing
+* whether every `critical` condition requires human review
+* whether every `high` or `critical` condition requires trace evidence
+* whether the generated `boundary_escalation_map` references valid wings and conditions
+
+This prevents unsafe or incomplete blocking routes from passing silently.
 
 ### Global Rules
 
@@ -148,6 +217,7 @@ The generated schema includes:
 * `wings`
 * `handoff_rules`
 * `blocking_conditions`
+* `boundary_escalation_map`
 * `safety_boundary`
 * `human_review`
 * `trace_core`
@@ -191,6 +261,9 @@ A successful validation run should look similar to this:
 [ok] wing-definition.example.yaml is valid
 [ok] wing_id values are unique
 [ok] handoff references are valid
+[ok] condition_id values are unique
+[ok] blocking condition escalation targets are valid
+[ok] blocking condition policy is valid
 [generate] Multi-Wing Orchestration Schema and Example
 [generated] generated/generated-multi-wing-defensive-orchestration.schema.json
 [generated] generated/generated-multi-wing-defensive-orchestration.example.yaml
@@ -199,6 +272,7 @@ A successful validation run should look similar to this:
 [validate] Generated Example
 [ok] generated-multi-wing-defensive-orchestration.example.yaml is valid
 [ok] generated handoff rules are internally valid
+[ok] generated boundary escalation map is internally valid
 ```
 
 ## Version Arc
@@ -206,6 +280,7 @@ A successful validation run should look similar to this:
 ```text
 v0.1 Generator Seed Layer
 v0.2 Handoff Rule Expansion
+v0.3 Blocking Condition Expansion
 ```
 
 ### v0.1 — Generator Seed Layer
@@ -216,11 +291,19 @@ It established the minimum path from declarative wing definitions to a generated
 
 ### v0.2 — Handoff Rule Expansion
 
-v0.2 expands the generator from schema output into wing graph generation.
+v0.2 expanded the generator from schema output into wing graph generation.
 
-It adds automatic handoff expansion, generated examples, reference validation, and stronger CI checks.
+It added automatic handoff expansion, generated examples, reference validation, and stronger CI checks.
 
-The generator now verifies that declared wing transitions form a valid orchestration graph.
+The generator became able to verify that declared wing transitions form a valid orchestration graph.
+
+### v0.3 — Blocking Condition Expansion
+
+v0.3 expands blocking conditions into structured defensive routing rules.
+
+It adds severity, escalation targets, human review requirements, trace requirements, and generated boundary escalation maps.
+
+The generator now verifies that defensive stopping conditions are not just declared, but structurally routable.
 
 ## Relationship to Yin-Yang Mythos Regulator
 
@@ -251,14 +334,16 @@ Multi-Wing Orchestration Generator
 The next likely version is:
 
 ```text
-v0.3 — Blocking Condition Expansion
+v0.4 — Human Review Gate Expansion
 ```
 
 Potential future layers include:
 
-* blocking condition severity classification
-* boundary escalation maps
-* human review gate expansion
+* generated human review gates
+* approval record generation
+* rejection record generation
+* review trigger expansion
+* required review path validation
 * trace receipt bridge generation
 * generated CI helper files
 * generated repository bootstrap templates
@@ -271,7 +356,10 @@ Potential future layers include:
 
 v0.1 created the generator seed.
 
-v0.2 gives that seed a wing graph.
+v0.2 gave that seed a wing graph.
 
-This repository is the beginning of a defensive orchestration forge.
+v0.3 gives the graph defensive stopping routes.
+
+This repository is becoming a defensive orchestration forge.
+
 
