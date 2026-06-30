@@ -1,5 +1,144 @@
 # Changelog
 
+## v0.4.0-candidate
+
+### Added
+
+* Added automatic `human_review_gates` generation.
+* Added review gates for wings with `requires_human_review: true`.
+* Added review gates for blocking conditions with `requires_human_review: true`.
+* Added `review_record_templates` for approval and rejection records.
+* Added validation for generated human review gates.
+* Added validation for human review gate coverage.
+* Added validation for approval and rejection record templates.
+
+### Changed
+
+* Updated `wing-definition.schema.json` from `0.3.0` to `0.4.0`.
+* Added `approval_record_fields` and `rejection_record_fields` to `global_rules.human_review`.
+* Updated generated orchestration examples to include `human_review_gates`.
+* Updated generated orchestration examples to include `review_record_templates`.
+* Strengthened CI validation around human review routing and review evidence.
+
+### Purpose
+
+v0.4 establishes the Human Review Gate Expansion layer.
+
+This version turns `requires_human_review` from a boolean flag into a generated review gate structure.
+
+```text
+v0.1 Generator Seed Layer
+= define and generate schema
+
+v0.2 Handoff Rule Expansion
+= generate and validate wing transitions
+
+v0.3 Blocking Condition Expansion
+= generate and validate defensive blocking routes
+
+v0.4 Human Review Gate Expansion
+= generate and validate human review gates
+```
+
+### Structural Position
+
+The generator now checks whether required human review paths are explicitly generated.
+
+A human review requirement is no longer only a boolean value.
+
+It is now a generated gate with:
+
+* a unique gate identity
+* a source wing or blocking condition
+* a review trigger
+* an escalation target
+* an approval record requirement
+* a rejection record requirement
+* a trace requirement
+
+This prevents human review requirements from passing silently without review routing or evidence templates.
+
+### Generated Artifacts
+
+v0.4 generates:
+
+```text
+generated/generated-multi-wing-defensive-orchestration.schema.json
+generated/generated-multi-wing-defensive-orchestration.example.yaml
+```
+
+The generated example now includes:
+
+```text
+blocking_conditions
+boundary_escalation_map
+human_review_gates
+review_record_templates
+```
+
+### Validation Scope
+
+v0.4 validates:
+
+* source wing definition example
+* duplicate `wing_id` values
+* invalid `handoff_to` references
+* duplicate `condition_id` values
+* invalid blocking condition escalation targets
+* blocking condition policy
+* generated JSON Schema syntax
+* generated example YAML against the generated schema
+* generated handoff rule references
+* generated boundary escalation map references
+* generated human review gate references
+* human review gate coverage
+* review record template requirements
+
+### Expected Validation Output
+
+A successful validation run should look similar to this:
+
+```text
+[validate] Wing Definition
+[ok] wing-definition.example.yaml is valid
+[ok] wing_id values are unique
+[ok] handoff references are valid
+[ok] condition_id values are unique
+[ok] blocking condition escalation targets are valid
+[ok] blocking condition policy is valid
+[generate] Multi-Wing Orchestration Schema and Example
+[generated] generated/generated-multi-wing-defensive-orchestration.schema.json
+[generated] generated/generated-multi-wing-defensive-orchestration.example.yaml
+[validate] Generated JSON Schema
+[ok] JSON Schema syntax is valid: generated/generated-multi-wing-defensive-orchestration.schema.json
+[validate] Generated Example
+[ok] generated-multi-wing-defensive-orchestration.example.yaml is valid
+[ok] generated handoff rules are internally valid
+[ok] generated boundary escalation map is internally valid
+[ok] generated human review gates are internally valid
+[ok] human review gate coverage is complete
+[ok] review record templates are valid
+```
+
+### Next Direction
+
+The next likely version is:
+
+```text
+v0.5 — Trace Receipt Bridge Expansion
+```
+
+Planned direction:
+
+* generate trace receipt requirements per wing
+* generate trace receipt requirements per handoff
+* generate trace receipt requirements per blocking condition
+* generate trace receipt requirements per human review gate
+* connect review gates to trace receipts
+* validate trace coverage before release-readiness checks
+
+---
+
 ## v0.3.0-candidate
 
 ### Added
@@ -84,46 +223,6 @@ v0.3 validates:
 * generated example YAML against the generated schema
 * generated handoff rule references
 * generated boundary escalation map references
-
-### Expected Validation Output
-
-A successful validation run should look similar to this:
-
-```text
-[validate] Wing Definition
-[ok] wing-definition.example.yaml is valid
-[ok] wing_id values are unique
-[ok] handoff references are valid
-[ok] condition_id values are unique
-[ok] blocking condition escalation targets are valid
-[ok] blocking condition policy is valid
-[generate] Multi-Wing Orchestration Schema and Example
-[generated] generated/generated-multi-wing-defensive-orchestration.schema.json
-[generated] generated/generated-multi-wing-defensive-orchestration.example.yaml
-[validate] Generated JSON Schema
-[ok] JSON Schema syntax is valid: generated/generated-multi-wing-defensive-orchestration.schema.json
-[validate] Generated Example
-[ok] generated-multi-wing-defensive-orchestration.example.yaml is valid
-[ok] generated handoff rules are internally valid
-[ok] generated boundary escalation map is internally valid
-```
-
-### Next Direction
-
-The next likely version is:
-
-```text
-v0.4 — Human Review Gate Expansion
-```
-
-Planned direction:
-
-* generate explicit human review gates
-* connect critical blocking conditions to review triggers
-* generate approval record structures
-* generate rejection record structures
-* validate required human review paths
-* strengthen release-readiness gating
 
 ---
 
@@ -231,4 +330,3 @@ GitHub Actions
 ```
 
 It established the seed of a defensive orchestration forge.
-
