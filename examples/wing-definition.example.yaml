@@ -1,5 +1,5 @@
-schema_version: "0.2.0"
-generator_id: "multi-wing-orchestration-generator.handoff-expansion"
+schema_version: "0.3.0"
+generator_id: "multi-wing-orchestration-generator.blocking-condition-expansion"
 created_at: "2026-06-30T00:00:00Z"
 
 target:
@@ -25,8 +25,18 @@ wings:
       - "analyst"
       - "boundary"
     blocking_conditions:
-      - "No reliable signal can be identified."
-      - "Input appears outside the declared orchestration scope."
+      - condition_id: "finder.no_reliable_signal"
+        description: "No reliable signal can be identified."
+        severity: "medium"
+        escalation_target: "boundary"
+        requires_human_review: false
+        trace_required: true
+      - condition_id: "finder.outside_scope"
+        description: "Input appears outside the declared orchestration scope."
+        severity: "high"
+        escalation_target: "boundary"
+        requires_human_review: true
+        trace_required: true
     requires_human_review: false
     emits_trace_receipt: true
 
@@ -45,8 +55,18 @@ wings:
       - "verifier"
       - "boundary"
     blocking_conditions:
-      - "Evidence is insufficient for classification."
-      - "Analysis would require prohibited inference."
+      - condition_id: "analyst.insufficient_evidence"
+        description: "Evidence is insufficient for classification."
+        severity: "medium"
+        escalation_target: "finder"
+        requires_human_review: false
+        trace_required: true
+      - condition_id: "analyst.prohibited_inference"
+        description: "Analysis would require prohibited inference."
+        severity: "high"
+        escalation_target: "boundary"
+        requires_human_review: true
+        trace_required: true
     requires_human_review: false
     emits_trace_receipt: true
 
@@ -65,8 +85,18 @@ wings:
       - "verifier"
       - "human_gate"
     blocking_conditions:
-      - "Repair path increases operational risk."
-      - "Repair requires bypassing declared permissions."
+      - condition_id: "repair.increases_operational_risk"
+        description: "Repair path increases operational risk."
+        severity: "high"
+        escalation_target: "human_gate"
+        requires_human_review: true
+        trace_required: true
+      - condition_id: "repair.requires_permission_bypass"
+        description: "Repair requires bypassing declared permissions."
+        severity: "critical"
+        escalation_target: "boundary"
+        requires_human_review: true
+        trace_required: true
     requires_human_review: true
     emits_trace_receipt: true
 
@@ -84,8 +114,18 @@ wings:
       - "trace_core"
       - "human_gate"
     blocking_conditions:
-      - "Required receipt fields are missing."
-      - "Schema validation fails."
+      - condition_id: "verifier.required_receipt_missing"
+        description: "Required receipt fields are missing."
+        severity: "high"
+        escalation_target: "trace_core"
+        requires_human_review: true
+        trace_required: true
+      - condition_id: "verifier.schema_validation_fails"
+        description: "Schema validation fails."
+        severity: "high"
+        escalation_target: "human_gate"
+        requires_human_review: true
+        trace_required: true
     requires_human_review: false
     emits_trace_receipt: true
 
@@ -103,8 +143,18 @@ wings:
       - "human_gate"
       - "trace_core"
     blocking_conditions:
-      - "Request violates declared prohibited uses."
-      - "Required human review is missing."
+      - condition_id: "boundary.prohibited_use_detected"
+        description: "Request violates declared prohibited uses."
+        severity: "critical"
+        escalation_target: "human_gate"
+        requires_human_review: true
+        trace_required: true
+      - condition_id: "boundary.required_review_missing"
+        description: "Required human review is missing."
+        severity: "critical"
+        escalation_target: "human_gate"
+        requires_human_review: true
+        trace_required: true
     requires_human_review: true
     emits_trace_receipt: true
 
@@ -121,8 +171,18 @@ wings:
     handoff_to:
       - "trace_core"
     blocking_conditions:
-      - "Human reviewer is unavailable."
-      - "Approval evidence is missing."
+      - condition_id: "human_gate.reviewer_unavailable"
+        description: "Human reviewer is unavailable."
+        severity: "high"
+        escalation_target: "trace_core"
+        requires_human_review: true
+        trace_required: true
+      - condition_id: "human_gate.approval_evidence_missing"
+        description: "Approval evidence is missing."
+        severity: "high"
+        escalation_target: "trace_core"
+        requires_human_review: true
+        trace_required: true
     requires_human_review: true
     emits_trace_receipt: true
 
@@ -138,8 +198,18 @@ wings:
       - "mutable_trace_without_revision"
     handoff_to: []
     blocking_conditions:
-      - "Trace identity cannot be established."
-      - "Required receipt fields are incomplete."
+      - condition_id: "trace_core.identity_unavailable"
+        description: "Trace identity cannot be established."
+        severity: "high"
+        escalation_target: "human_gate"
+        requires_human_review: true
+        trace_required: true
+      - condition_id: "trace_core.receipt_fields_incomplete"
+        description: "Required receipt fields are incomplete."
+        severity: "high"
+        escalation_target: "verifier"
+        requires_human_review: true
+        trace_required: true
     requires_human_review: false
     emits_trace_receipt: true
 
@@ -158,6 +228,7 @@ global_rules:
     required: true
     reviewer_role: "authorized_human_reviewer"
     review_triggers:
+      - "Any critical blocking condition."
       - "Any repair proposal that changes operational behavior."
       - "Any boundary override request."
       - "Any release-readiness decision."
@@ -180,6 +251,7 @@ global_rules:
       - "wings"
       - "handoff_rules"
       - "blocking_conditions"
+      - "boundary_escalation_map"
       - "safety_boundary"
       - "human_review"
       - "trace_core"
