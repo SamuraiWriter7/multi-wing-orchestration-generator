@@ -1,6 +1,6 @@
 # Multi-Wing Orchestration Generator
 
-Experimental OS-level generator for defensive multi-wing orchestration structures, schema fragments, safety boundaries, escalation routes, and human review gates.
+Experimental OS-level generator for defensive multi-wing orchestration structures, schema fragments, handoff rules, blocking routes, escalation maps, human review gates, and review record templates.
 
 ## Purpose
 
@@ -18,28 +18,23 @@ multi-wing-orchestration-generator
 = generator layer for producing defensive multi-wing structures
 ```
 
-The goal is to keep the defensive protocol itself separate from the tooling that generates orchestration schemas, handoff rules, blocking routes, escalation maps, examples, and validation structures.
+The goal is to keep the defensive protocol itself separate from the tooling that generates orchestration schemas, handoff rules, blocking routes, escalation maps, human review gates, review record templates, examples, and validation structures.
 
-## v0.3 Scope
+## v0.4 Scope
 
-v0.3 defines the Blocking Condition Expansion layer.
+v0.4 defines the Human Review Gate Expansion layer.
 
-It expands `blocking_conditions` from plain strings into structured defensive routing rules.
+It expands `requires_human_review` from a boolean flag into generated `human_review_gates`.
 
-v0.3 adds:
+v0.4 adds:
 
-* structured blocking condition definitions
-* `condition_id`
-* `description`
-* `severity`
-* `escalation_target`
-* `requires_human_review`
-* `trace_required`
-* automatic `boundary_escalation_map` generation
-* duplicate `condition_id` detection
-* invalid `escalation_target` detection
-* blocking condition policy validation
-* generated boundary escalation map validation
+* automatic `human_review_gates` generation
+* review gates for wings with `requires_human_review: true`
+* review gates for blocking conditions with `requires_human_review: true`
+* `review_record_templates` for approval and rejection records
+* validation for generated human review gates
+* validation for human review gate coverage
+* validation for approval and rejection record templates
 
 ## Repository Structure
 
@@ -125,7 +120,7 @@ This allows the generator to treat wing transitions as a verifiable orchestratio
 
 ### Blocking Condition Expansion
 
-v0.3 expands `blocking_conditions` from plain strings into structured defensive routing rules.
+v0.3 expanded `blocking_conditions` from plain strings into structured defensive routing rules.
 
 Before v0.3:
 
@@ -147,7 +142,7 @@ blocking_conditions:
     trace_required: true
 ```
 
-Each blocking condition now includes:
+Each blocking condition includes:
 
 * `condition_id`
 * `description`
@@ -160,7 +155,7 @@ This turns blocking conditions into explicit defensive routing rules.
 
 ### Boundary Escalation Map
 
-v0.3 automatically generates a `boundary_escalation_map` from declared blocking conditions.
+v0.3 introduced automatic `boundary_escalation_map` generation from declared blocking conditions.
 
 The escalation map records:
 
@@ -172,6 +167,91 @@ The escalation map records:
 * whether trace evidence is required
 
 This allows defensive routes to be validated as part of CI.
+
+### Human Review Gate Expansion
+
+v0.4 expands `requires_human_review` into generated `human_review_gates`.
+
+The generator creates review gates from:
+
+* wings that require human review
+* blocking conditions that require human review
+
+For example, a blocking condition such as:
+
+```yaml
+- condition_id: "repair.increases_operational_risk"
+  description: "Repair path increases operational risk."
+  severity: "high"
+  escalation_target: "human_gate"
+  requires_human_review: true
+  trace_required: true
+```
+
+can produce a generated human review gate:
+
+```yaml
+human_review_gates:
+  - gate_id: "gate.repair.increases_operational_risk"
+    source_type: "blocking_condition"
+    source_id: "repair.increases_operational_risk"
+    source_wing: "repair"
+    severity: "high"
+    reviewer_role: "authorized_human_reviewer"
+    review_trigger: "Repair path increases operational risk."
+    escalation_target: "human_gate"
+    approval_record_required: true
+    rejection_record_required: true
+    trace_required: true
+```
+
+Each generated human review gate includes:
+
+* `gate_id`
+* `source_type`
+* `source_id`
+* `source_wing`
+* `severity`
+* `reviewer_role`
+* `review_trigger`
+* `escalation_target`
+* `approval_record_required`
+* `rejection_record_required`
+* `trace_required`
+
+This turns human review from a passive flag into an explicit review gate.
+
+### Review Record Templates
+
+v0.4 also introduces `review_record_templates`.
+
+These templates define the required fields for approval and rejection records.
+
+Example:
+
+```yaml
+review_record_templates:
+  approval_record:
+    required_fields:
+      - "review_id"
+      - "gate_id"
+      - "reviewer_role"
+      - "decision"
+      - "approved_at"
+      - "approval_reason"
+      - "trace_id"
+  rejection_record:
+    required_fields:
+      - "review_id"
+      - "gate_id"
+      - "reviewer_role"
+      - "decision"
+      - "rejected_at"
+      - "rejection_reason"
+      - "trace_id"
+```
+
+This ensures that human decisions are not only required, but also traceable.
 
 ### Wing Graph Validation
 
@@ -186,8 +266,6 @@ This prevents silent orchestration drift caused by broken wing references.
 
 ### Blocking Condition Validation
 
-v0.3 adds validation for defensive blocking policy.
-
 The validation script checks:
 
 * whether every `condition_id` is unique
@@ -198,12 +276,29 @@ The validation script checks:
 
 This prevents unsafe or incomplete blocking routes from passing silently.
 
+### Human Review Gate Validation
+
+v0.4 adds validation for human review routing.
+
+The validation script checks:
+
+* whether generated human review gates reference valid wings
+* whether generated human review gates reference valid blocking conditions
+* whether generated human review gates have unique `gate_id` values
+* whether every human-review-required wing has a corresponding gate
+* whether every human-review-required blocking condition has a corresponding gate
+* whether approval and rejection record templates include required evidence fields
+
+This prevents human review requirements from existing only as decorative flags.
+
 ### Global Rules
 
 Global rules define shared orchestration requirements:
 
 * safety boundaries
 * human review requirements
+* approval record fields
+* rejection record fields
 * trace receipt requirements
 * orchestration receipt requirements
 
@@ -218,6 +313,8 @@ The generated schema includes:
 * `handoff_rules`
 * `blocking_conditions`
 * `boundary_escalation_map`
+* `human_review_gates`
+* `review_record_templates`
 * `safety_boundary`
 * `human_review`
 * `trace_core`
@@ -273,6 +370,9 @@ A successful validation run should look similar to this:
 [ok] generated-multi-wing-defensive-orchestration.example.yaml is valid
 [ok] generated handoff rules are internally valid
 [ok] generated boundary escalation map is internally valid
+[ok] generated human review gates are internally valid
+[ok] human review gate coverage is complete
+[ok] review record templates are valid
 ```
 
 ## Version Arc
@@ -281,6 +381,7 @@ A successful validation run should look similar to this:
 v0.1 Generator Seed Layer
 v0.2 Handoff Rule Expansion
 v0.3 Blocking Condition Expansion
+v0.4 Human Review Gate Expansion
 ```
 
 ### v0.1 — Generator Seed Layer
@@ -299,11 +400,19 @@ The generator became able to verify that declared wing transitions form a valid 
 
 ### v0.3 — Blocking Condition Expansion
 
-v0.3 expands blocking conditions into structured defensive routing rules.
+v0.3 expanded blocking conditions into structured defensive routing rules.
 
-It adds severity, escalation targets, human review requirements, trace requirements, and generated boundary escalation maps.
+It added severity, escalation targets, human review requirements, trace requirements, and generated boundary escalation maps.
 
-The generator now verifies that defensive stopping conditions are not just declared, but structurally routable.
+The generator became able to verify that defensive stopping conditions are not just declared, but structurally routable.
+
+### v0.4 — Human Review Gate Expansion
+
+v0.4 expands human review flags into generated review gates.
+
+It adds human review gate generation, approval record templates, rejection record templates, gate coverage validation, and review evidence validation.
+
+The generator now verifies that required human review paths are explicitly generated and traceable.
 
 ## Relationship to Yin-Yang Mythos Regulator
 
@@ -334,21 +443,21 @@ Multi-Wing Orchestration Generator
 The next likely version is:
 
 ```text
-v0.4 — Human Review Gate Expansion
+v0.5 — Trace Receipt Bridge Expansion
 ```
 
 Potential future layers include:
 
-* generated human review gates
-* approval record generation
-* rejection record generation
-* review trigger expansion
-* required review path validation
-* trace receipt bridge generation
+* generated trace receipt requirements per wing
+* generated trace receipt requirements per handoff
+* generated trace receipt requirements per blocking condition
+* generated trace receipt requirements per human review gate
+* trace coverage validation
+* release-readiness checks
 * generated CI helper files
 * generated repository bootstrap templates
 * orchestration graph visualization
-* Multi-Wing release-readiness checks
+* Multi-Wing release-readiness gates
 
 ## Summary
 
@@ -358,8 +467,11 @@ v0.1 created the generator seed.
 
 v0.2 gave that seed a wing graph.
 
-v0.3 gives the graph defensive stopping routes.
+v0.3 gave the graph defensive stopping routes.
+
+v0.4 gives the routes human review gates and decision records.
 
 This repository is becoming a defensive orchestration forge.
+
 
 
