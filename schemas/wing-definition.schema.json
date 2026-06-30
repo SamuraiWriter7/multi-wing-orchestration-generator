@@ -17,7 +17,7 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "0.2.0"
+      "const": "0.3.0"
     },
     "generator_id": {
       "type": "string",
@@ -119,10 +119,46 @@
           "blocking_conditions": {
             "type": "array",
             "minItems": 1,
-            "uniqueItems": true,
             "items": {
-              "type": "string",
-              "minLength": 1
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "condition_id",
+                "description",
+                "severity",
+                "escalation_target",
+                "requires_human_review",
+                "trace_required"
+              ],
+              "properties": {
+                "condition_id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ]
+                },
+                "escalation_target": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]*$"
+                },
+                "requires_human_review": {
+                  "type": "boolean"
+                },
+                "trace_required": {
+                  "type": "boolean"
+                }
+              }
             }
           },
           "requires_human_review": {
