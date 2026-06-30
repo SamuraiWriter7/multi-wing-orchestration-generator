@@ -81,6 +81,74 @@ def validate_handoff_references(wings: List[Dict[str, Any]]) -> None:
         raise ValueError(f"Invalid handoff reference detected:\n  - {joined}")
 
 
+def validate_unique_condition_ids(wings: List[Dict[str, Any]]) -> None:
+    seen: Set[str] = set()
+    duplicates: Set[str] = set()
+
+    for wing in wings:
+        for condition in wing.get("blocking_conditions", []):
+            condition_id = condition["condition_id"]
+
+            if condition_id in seen:
+                duplicates.add(condition_id)
+
+            seen.add(condition_id)
+
+    if duplicates:
+        duplicate_list = ", ".join(sorted(duplicates))
+        raise ValueError(f"Duplicate condition_id detected: {duplicate_list}")
+
+
+def validate_blocking_condition_escalation_targets(wings: List[Dict[str, Any]]) -> None:
+    wing_ids = set(get_wing_ids(wings))
+    errors: List[str] = []
+
+    for wing in wings:
+        for condition in wing.get("blocking_conditions", []):
+            condition_id = condition["condition_id"]
+            escalation_target = condition["escalation_target"]
+
+            if escalation_target not in wing_ids:
+                errors.append(f"{condition_id} -> {escalation_target}")
+
+    if errors:
+        joined = "\n  - ".join(errors)
+        raise ValueError(f"Invalid escalation_target detected:\n  - {joined}")
+
+
+def validate_blocking_condition_policy(wings: List[Dict[str, Any]]) -> None:
+    errors: List[str] = []
+
+    for wing in wings:
+        for condition in wing.get("blocking_conditions", []):
+            condition_id = condition["condition_id"]
+            severity = condition["severity"]
+            requires_human_review = condition["requires_human_review"]
+            trace_required = condition["trace_required"]
+
+            if severity == "critical" and not requires_human_review:
+                errors.append(
+                    f"{condition_id}: critical severity must require human review"
+                )
+
+            if severity in {"high", "critical"} and not trace_required:
+                errors.append(
+                    f"{condition_id}: high or critical severity must require trace"
+                )
+
+    if errors:
+        joined = "\n  - ".join(errors)
+        raise ValueError(f"Invalid blocking condition policy:\n  - {joined}")
+
+
+def validate_definition_integrity(wings: List[Dict[str, Any]]) -> None:
+    validate_unique_wing_ids(wings)
+    validate_handoff_references(wings)
+    validate_unique_condition_ids(wings)
+    validate_blocking_condition_escalation_targets(wings)
+    validate_blocking_condition_policy(wings)
+
+
 def expand_handoff_rules(wings: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     handoff_rules: List[Dict[str, str]] = []
 
@@ -99,8 +167,8 @@ def expand_handoff_rules(wings: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     return handoff_rules
 
 
-def expand_blocking_conditions(wings: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    blocking_conditions: List[Dict[str, str]] = []
+def expand_blocking_conditions(wings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    blocking_conditions: List[Dict[str, Any]] = []
 
     for wing in wings:
         wing_id = wing["wing_id"]
@@ -108,23 +176,46 @@ def expand_blocking_conditions(wings: List[Dict[str, Any]]) -> List[Dict[str, st
         for condition in wing.get("blocking_conditions", []):
             blocking_conditions.append(
                 {
+                    "condition_id": condition["condition_id"],
                     "wing_id": wing_id,
-                    "condition": condition,
-                    "severity": "high"
+                    "description": condition["description"],
+                    "severity": condition["severity"],
+                    "escalation_target": condition["escalation_target"],
+                    "requires_human_review": condition["requires_human_review"],
+                    "trace_required": condition["trace_required"]
                 }
             )
 
     return blocking_conditions
 
 
+def build_boundary_escalation_map(wings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    escalation_map: List[Dict[str, Any]] = []
+
+    for wing in wings:
+        source_wing = wing["wing_id"]
+
+        for condition in wing.get("blocking_conditions", []):
+            escalation_map.append(
+                {
+                    "condition_id": condition["condition_id"],
+                    "source_wing": source_wing,
+                    "severity": condition["severity"],
+                    "escalation_target": condition["escalation_target"],
+                    "requires_human_review": condition["requires_human_review"],
+                    "trace_required": condition["trace_required"]
+                }
+            )
+
+    return escalation_map
+
+
 def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
     target = definition["target"]
     wings = definition["wings"]
-    global_rules = definition["global_rules"]
     strict = definition["generator_config"]["strict_additional_properties"]
 
-    validate_unique_wing_ids(wings)
-    validate_handoff_references(wings)
+    validate_definition_integrity(wings)
 
     wing_ids = get_wing_ids(wings)
 
@@ -142,6 +233,7 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
             "wings",
             "handoff_rules",
             "blocking_conditions",
+            "boundary_escalation_map",
             "safety_boundary",
             "human_review",
             "trace_core"
@@ -149,7 +241,7 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
         "properties": {
             "schema_version": {
                 "type": "string",
-                "const": "0.2.0"
+                "const": "0.3.0"
             },
             "orchestration_id": {
                 "type": "string",
@@ -178,6 +270,12 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
                     "$ref": "#/$defs/blocking_condition"
                 }
             },
+            "boundary_escalation_map": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/$defs/boundary_escalation"
+                }
+            },
             "safety_boundary": {
                 "$ref": "#/$defs/safety_boundary"
             },
@@ -192,6 +290,15 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
             "wing_id": {
                 "type": "string",
                 "enum": wing_ids
+            },
+            "severity": {
+                "type": "string",
+                "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                ]
             },
             "wing_state": {
                 "type": "object",
@@ -265,26 +372,70 @@ def build_generated_schema(definition: Dict[str, Any]) -> Dict[str, Any]:
                 "type": "object",
                 "additionalProperties": not strict,
                 "required": [
+                    "condition_id",
                     "wing_id",
-                    "condition",
-                    "severity"
+                    "description",
+                    "severity",
+                    "escalation_target",
+                    "requires_human_review",
+                    "trace_required"
                 ],
                 "properties": {
+                    "condition_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
                     "wing_id": {
                         "$ref": "#/$defs/wing_id"
                     },
-                    "condition": {
+                    "description": {
                         "type": "string",
                         "minLength": 1
                     },
                     "severity": {
+                        "$ref": "#/$defs/severity"
+                    },
+                    "escalation_target": {
+                        "$ref": "#/$defs/wing_id"
+                    },
+                    "requires_human_review": {
+                        "type": "boolean"
+                    },
+                    "trace_required": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "boundary_escalation": {
+                "type": "object",
+                "additionalProperties": not strict,
+                "required": [
+                    "condition_id",
+                    "source_wing",
+                    "severity",
+                    "escalation_target",
+                    "requires_human_review",
+                    "trace_required"
+                ],
+                "properties": {
+                    "condition_id": {
                         "type": "string",
-                        "enum": [
-                            "low",
-                            "medium",
-                            "high",
-                            "critical"
-                        ]
+                        "minLength": 1
+                    },
+                    "source_wing": {
+                        "$ref": "#/$defs/wing_id"
+                    },
+                    "severity": {
+                        "$ref": "#/$defs/severity"
+                    },
+                    "escalation_target": {
+                        "$ref": "#/$defs/wing_id"
+                    },
+                    "requires_human_review": {
+                        "type": "boolean"
+                    },
+                    "trace_required": {
+                        "type": "boolean"
                     }
                 }
             },
@@ -373,11 +524,10 @@ def build_generated_example(definition: Dict[str, Any]) -> Dict[str, Any]:
     wings = definition["wings"]
     global_rules = definition["global_rules"]
 
-    validate_unique_wing_ids(wings)
-    validate_handoff_references(wings)
+    validate_definition_integrity(wings)
 
     return {
-        "schema_version": "0.2.0",
+        "schema_version": "0.3.0",
         "orchestration_id": f"{definition['target']['protocol_name']}.generated.example",
         "created_at": now_utc(),
         "wings": [
@@ -393,6 +543,7 @@ def build_generated_example(definition: Dict[str, Any]) -> Dict[str, Any]:
         ],
         "handoff_rules": expand_handoff_rules(wings),
         "blocking_conditions": expand_blocking_conditions(wings),
+        "boundary_escalation_map": build_boundary_escalation_map(wings),
         "safety_boundary": {
             "prohibited_uses": global_rules["safety_boundary"]["prohibited_uses"],
             "escalation_conditions": global_rules["safety_boundary"]["escalation_conditions"]
