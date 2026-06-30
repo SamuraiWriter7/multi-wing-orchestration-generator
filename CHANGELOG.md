@@ -1,5 +1,171 @@
 # Changelog
 
+## v0.5.0-candidate
+
+### Added
+
+* Added automatic `trace_receipt_requirements` generation.
+* Added trace requirements for wings that emit trace receipts.
+* Added trace requirements for generated handoff rules.
+* Added trace requirements for blocking conditions that require trace evidence.
+* Added trace requirements for human review gates that require trace evidence.
+* Added `trace_coverage_matrix`.
+* Added validation for generated trace receipt requirements.
+* Added validation for trace coverage completeness.
+* Added validation that required trace targets have trace requirements.
+
+### Changed
+
+* Updated `wing-definition.schema.json` from `0.4.0` to `0.5.0`.
+* Added `required_event_types` to `global_rules.trace_receipt`.
+* Added `rule_id` to generated handoff rules.
+* Updated generated orchestration examples to include `trace_receipt_requirements`.
+* Updated generated orchestration examples to include `trace_coverage_matrix`.
+* Updated generated schemas to include trace receipt requirements and trace coverage structures.
+* Strengthened CI validation around trace coverage and trace receipt routing.
+
+### Purpose
+
+v0.5 establishes the Trace Receipt Bridge Expansion layer.
+
+This version turns traceability from a global setting into generated trace coverage.
+
+```text
+v0.1 Generator Seed Layer
+= define and generate schema
+
+v0.2 Handoff Rule Expansion
+= generate and validate wing transitions
+
+v0.3 Blocking Condition Expansion
+= generate and validate defensive blocking routes
+
+v0.4 Human Review Gate Expansion
+= generate and validate human review gates
+
+v0.5 Trace Receipt Bridge Expansion
+= generate and validate trace receipt coverage
+```
+
+### Structural Position
+
+The generator now checks whether every trace-required event has explicit trace coverage.
+
+Traceability is no longer only a global declaration.
+
+It is now generated for:
+
+* wings
+* handoff rules
+* blocking conditions
+* human review gates
+
+This prevents trace-required events from passing silently without receipt requirements or coverage validation.
+
+### Generated Artifacts
+
+v0.5 generates:
+
+```text
+generated/generated-multi-wing-defensive-orchestration.schema.json
+generated/generated-multi-wing-defensive-orchestration.example.yaml
+```
+
+The generated example now includes:
+
+```text
+blocking_conditions
+boundary_escalation_map
+human_review_gates
+review_record_templates
+trace_receipt_requirements
+trace_coverage_matrix
+```
+
+### Validation Scope
+
+v0.5 validates:
+
+* source wing definition example
+* duplicate `wing_id` values
+* invalid `handoff_to` references
+* duplicate `condition_id` values
+* invalid blocking condition escalation targets
+* blocking condition policy
+* generated JSON Schema syntax
+* generated example YAML against the generated schema
+* generated handoff rule references
+* generated boundary escalation map references
+* generated human review gate references
+* human review gate coverage
+* review record template requirements
+* generated trace receipt requirement references
+* trace coverage matrix completeness
+* trace-required target coverage
+
+### Expected Validation Output
+
+A successful validation run should look similar to this:
+
+```text
+[validate] Wing Definition
+[ok] wing-definition.example.yaml is valid
+[ok] wing_id values are unique
+[ok] handoff references are valid
+[ok] condition_id values are unique
+[ok] blocking condition escalation targets are valid
+[ok] blocking condition policy is valid
+[generate] Multi-Wing Orchestration Schema and Example
+[generated] generated/generated-multi-wing-defensive-orchestration.schema.json
+[generated] generated/generated-multi-wing-defensive-orchestration.example.yaml
+[validate] Generated JSON Schema
+[ok] JSON Schema syntax is valid: generated/generated-multi-wing-defensive-orchestration.schema.json
+[validate] Generated Example
+[ok] generated-multi-wing-defensive-orchestration.example.yaml is valid
+[ok] generated handoff rules are internally valid
+[ok] generated boundary escalation map is internally valid
+[ok] generated human review gates are internally valid
+[ok] human review gate coverage is complete
+[ok] review record templates are valid
+[ok] generated trace receipt requirements are internally valid
+[ok] trace coverage matrix covers all trace requirements
+[ok] required trace targets have trace requirements
+```
+
+### First Arc Completion
+
+v0.5 can be treated as the completion of the first generator arc.
+
+```text
+v0.1 Generate
+v0.2 Connect
+v0.3 Block
+v0.4 Review
+v0.5 Trace
+```
+
+At this stage, the generator can produce a CI-verifiable defensive orchestration structure with generated handoff, blocking, human review, and trace coverage layers.
+
+### Next Direction
+
+Future versions may proceed into a second generator arc.
+
+Possible next direction:
+
+```text
+v0.6 — Release Readiness Gate Generator
+```
+
+Planned direction:
+
+* generate release-readiness gates
+* check schema / example alignment
+* check README / CHANGELOG alignment
+* generate candidate release checklists
+* validate whether a generated orchestration structure is ready for release
+
+---
+
 ## v0.4.0-candidate
 
 ### Added
@@ -67,7 +233,7 @@ generated/generated-multi-wing-defensive-orchestration.schema.json
 generated/generated-multi-wing-defensive-orchestration.example.yaml
 ```
 
-The generated example now includes:
+The generated example includes:
 
 ```text
 blocking_conditions
@@ -93,49 +259,6 @@ v0.4 validates:
 * generated human review gate references
 * human review gate coverage
 * review record template requirements
-
-### Expected Validation Output
-
-A successful validation run should look similar to this:
-
-```text
-[validate] Wing Definition
-[ok] wing-definition.example.yaml is valid
-[ok] wing_id values are unique
-[ok] handoff references are valid
-[ok] condition_id values are unique
-[ok] blocking condition escalation targets are valid
-[ok] blocking condition policy is valid
-[generate] Multi-Wing Orchestration Schema and Example
-[generated] generated/generated-multi-wing-defensive-orchestration.schema.json
-[generated] generated/generated-multi-wing-defensive-orchestration.example.yaml
-[validate] Generated JSON Schema
-[ok] JSON Schema syntax is valid: generated/generated-multi-wing-defensive-orchestration.schema.json
-[validate] Generated Example
-[ok] generated-multi-wing-defensive-orchestration.example.yaml is valid
-[ok] generated handoff rules are internally valid
-[ok] generated boundary escalation map is internally valid
-[ok] generated human review gates are internally valid
-[ok] human review gate coverage is complete
-[ok] review record templates are valid
-```
-
-### Next Direction
-
-The next likely version is:
-
-```text
-v0.5 — Trace Receipt Bridge Expansion
-```
-
-Planned direction:
-
-* generate trace receipt requirements per wing
-* generate trace receipt requirements per handoff
-* generate trace receipt requirements per blocking condition
-* generate trace receipt requirements per human review gate
-* connect review gates to trace receipts
-* validate trace coverage before release-readiness checks
 
 ---
 
@@ -201,7 +324,7 @@ generated/generated-multi-wing-defensive-orchestration.schema.json
 generated/generated-multi-wing-defensive-orchestration.example.yaml
 ```
 
-The generated example now includes:
+The generated example includes:
 
 ```text
 blocking_conditions
