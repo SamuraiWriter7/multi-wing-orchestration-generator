@@ -1,0 +1,189 @@
+schema_version: "0.1.0"
+generator_id: "multi-wing-orchestration-generator.seed"
+created_at: "2026-06-30T00:00:00Z"
+
+target:
+  protocol_name: "multi-wing-defensive-orchestration"
+  output_schema_title: "Generated Multi-Wing Defensive Orchestration"
+  output_schema_id: "https://example.org/schemas/generated-multi-wing-defensive-orchestration.schema.json"
+  output_schema_filename: "generated-multi-wing-defensive-orchestration.schema.json"
+
+wings:
+  - wing_id: "finder"
+    wing_name: "Finder Wing"
+    purpose: "Detect relevant structural signals, risks, missing context, and candidate evidence."
+    allowed_outputs:
+      - "candidate_signal"
+      - "risk_hint"
+      - "missing_context_notice"
+    prohibited_outputs:
+      - "final_decision"
+      - "repair_instruction"
+      - "permission_override"
+    handoff_to:
+      - "analyst"
+      - "boundary"
+    blocking_conditions:
+      - "No reliable signal can be identified."
+      - "Input appears outside the declared orchestration scope."
+    requires_human_review: false
+    emits_trace_receipt: true
+
+  - wing_id: "analyst"
+    wing_name: "Analyst Wing"
+    purpose: "Interpret signals, classify structural risk, and prepare reviewable findings."
+    allowed_outputs:
+      - "risk_classification"
+      - "structural_analysis"
+      - "evidence_summary"
+    prohibited_outputs:
+      - "unreviewed_execution_plan"
+      - "unsafe_recommendation"
+    handoff_to:
+      - "repair"
+      - "verifier"
+      - "boundary"
+    blocking_conditions:
+      - "Evidence is insufficient for classification."
+      - "Analysis would require prohibited inference."
+    requires_human_review: false
+    emits_trace_receipt: true
+
+  - wing_id: "repair"
+    wing_name: "Repair Wing"
+    purpose: "Suggest defensive corrections, safer alternatives, and structural repair paths."
+    allowed_outputs:
+      - "repair_proposal"
+      - "safe_alternative"
+      - "mitigation_step"
+    prohibited_outputs:
+      - "coercive_instruction"
+      - "harmful_optimization"
+      - "boundary_bypass"
+    handoff_to:
+      - "verifier"
+      - "human_gate"
+    blocking_conditions:
+      - "Repair path increases operational risk."
+      - "Repair requires bypassing declared permissions."
+    requires_human_review: true
+    emits_trace_receipt: true
+
+  - wing_id: "verifier"
+    wing_name: "Verifier Wing"
+    purpose: "Check whether outputs satisfy schema, safety boundary, and traceability requirements."
+    allowed_outputs:
+      - "verification_result"
+      - "validation_error"
+      - "release_readiness_status"
+    prohibited_outputs:
+      - "unverified_release"
+      - "silent_pass"
+    handoff_to:
+      - "trace_core"
+      - "human_gate"
+    blocking_conditions:
+      - "Required receipt fields are missing."
+      - "Schema validation fails."
+    requires_human_review: false
+    emits_trace_receipt: true
+
+  - wing_id: "boundary"
+    wing_name: "Boundary Wing"
+    purpose: "Enforce permission boundaries, blocking conditions, and escalation requirements."
+    allowed_outputs:
+      - "boundary_decision"
+      - "escalation_notice"
+      - "blocked_action_notice"
+    prohibited_outputs:
+      - "permission_override"
+      - "silent_escalation"
+    handoff_to:
+      - "human_gate"
+      - "trace_core"
+    blocking_conditions:
+      - "Request violates declared prohibited uses."
+      - "Required human review is missing."
+    requires_human_review: true
+    emits_trace_receipt: true
+
+  - wing_id: "human_gate"
+    wing_name: "Human Gate"
+    purpose: "Require explicit human judgment before high-risk or boundary-sensitive transitions."
+    allowed_outputs:
+      - "human_review_request"
+      - "approval_record"
+      - "rejection_record"
+    prohibited_outputs:
+      - "auto_approval"
+      - "implicit_consent"
+    handoff_to:
+      - "trace_core"
+    blocking_conditions:
+      - "Human reviewer is unavailable."
+      - "Approval evidence is missing."
+    requires_human_review: true
+    emits_trace_receipt: true
+
+  - wing_id: "trace_core"
+    wing_name: "Trace Core"
+    purpose: "Record orchestration receipts, wing transitions, decisions, and review evidence."
+    allowed_outputs:
+      - "orchestration_receipt"
+      - "handoff_log"
+      - "review_trace"
+    prohibited_outputs:
+      - "unattributed_decision"
+      - "mutable_trace_without_revision"
+    handoff_to: []
+    blocking_conditions:
+      - "Trace identity cannot be established."
+      - "Required receipt fields are incomplete."
+    requires_human_review: false
+    emits_trace_receipt: true
+
+global_rules:
+  safety_boundary:
+    prohibited_uses:
+      - "Bypassing declared permission boundaries."
+      - "Generating harmful operational instructions."
+      - "Suppressing required trace or review evidence."
+    escalation_conditions:
+      - "A wing detects conflict between allowed and prohibited outputs."
+      - "A repair path requires elevated permission."
+      - "A boundary decision blocks orchestration progress."
+
+  human_review:
+    required: true
+    reviewer_role: "authorized_human_reviewer"
+    review_triggers:
+      - "Any repair proposal that changes operational behavior."
+      - "Any boundary override request."
+      - "Any release-readiness decision."
+
+  trace_receipt:
+    enabled: true
+    required_fields:
+      - "trace_id"
+      - "wing_id"
+      - "event_type"
+      - "input_reference"
+      - "output_reference"
+      - "created_at"
+
+  orchestration_receipt:
+    required_fields:
+      - "schema_version"
+      - "orchestration_id"
+      - "created_at"
+      - "wings"
+      - "handoff_rules"
+      - "blocking_conditions"
+      - "safety_boundary"
+      - "human_review"
+      - "trace_core"
+
+generator_config:
+  output_directory: "generated"
+  strict_additional_properties: true
+  include_generated_example: false
